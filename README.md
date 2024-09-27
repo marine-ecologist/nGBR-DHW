@@ -13,7 +13,7 @@
 
 Reproducible workflow for analysis of the 2024 mass bleaching event at Lizard Island (northern GBR) using the Degree Heating Weeks (DHW) and Bleaching Alert Area (BAA) data from NOAA [Coral Reef Watch](https://coralreefwatch.noaa.gov) (CRW).
 
-- Link to [github pages reproducible workflow](https://github.com/marine-ecologist/nGBR-DHW/blob/main/index.Rmd)
+- Link to [github pages](https://marine-ecologist.github.io/nGBR-DHW/) reproducible workflow
 - Link to [rmarkdown file](https://github.com/marine-ecologist/nGBR-DHW/blob/main/index.Rmd)
 
 contact: george.roff@csiro.au (updated 17/09/24)

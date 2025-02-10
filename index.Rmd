@@ -16,9 +16,9 @@ Reproducible workflow and analysis for calculation of thermal stress and Degree 
 Extract DHW data from NOAA for gridcells surround Lizard Island between 1997 - present
 
 ```{r, eval=FALSE}
-library("tidyverse")
-library("rerddap")
-library("sf")
+library(tidyverse)
+library(rerddap)
+library(sf)
 
 # north_point -14.645754, 145.454105
 # palfrey -14.700424, 145.448641
@@ -45,13 +45,22 @@ saveRDS(northpointDHW, "/Users/rof011/northpointDHW.Rds")
 
 #https://coastwatch.pfeg.noaa.gov/erddap/griddap/NOAA_DHW.nc?CRW_BAA%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_BAA_7D_MAX%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_DHW%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_HOTSPOT%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_SST%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_SSTANOMALY%5B(2017-01-01T12:00:00Z):1:(2024-07-01T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D
 
+#https://coastwatch.pfeg.noaa.gov/erddap/griddap/NOAA_DHW.nc?CRW_BAA%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_BAA_7D_MAX%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_DHW%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_HOTSPOT%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_SST%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D,CRW_SSTANOMALY%5B(2010-01-01T12:00:00Z):1:(2025-02-08T12:00:00Z)%5D%5B(-14.645754):1:(-14.700424)%5D%5B(145.448641):1:(145.454105)%5D
+
 
 ```
 
-```{r, include=FALSE, eval=TRUE, message=FALSE, warning=FALSE}
-library("tidyverse")
-library("rerddap")
-library("sf")
+```{r, include=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
+
+
+library(tidyverse)
+library(janitor)
+library(dhw)
+library(sf)
+library(ggplot2)
+library(terra)
+library(tidyterra)
+library(rlang)
 
 north_point_sf <- st_sf(geometry = st_sfc(st_point(c(145.454105, -14.645754)), crs = 4326))
 palfrey_se_sf <- st_sf(geometry = st_sfc(st_point(c(145.448641, -14.700424)), crs = 4326))
@@ -69,77 +78,61 @@ Plot subset of DHW data to explore location of gridcells:
 
 ```{r, fig.width=5, fig.height=7, message=FALSE, warning=FALSE}
 
-library(tidyverse)
-library(janitor)
-library(httr)
 
 
 
-### get GBR shp file
-url <- "https://data.gov.au/data/dataset/51199513-98fa-46e6-b766-8e1e1c896869/resource/01573d07-ce10-461d-9f20-86e8e6cf5893/download/data.zip"
-temp_zip <- tempfile()
-invisible(capture.output(GET(url, write_disk(temp_zip, overwrite = TRUE))))
-temp_dir <- tempdir()
-unzip(temp_zip, exdir = temp_dir)
-shapefiles <- list.files(temp_dir, pattern = "\\.shp$", recursive=TRUE, full.names = TRUE)
-shapefile_path <- shapefiles[1]
+#gbr_shapefile <- download_gbr_spatial(return = "base")
+gbr_shapefile <- st_read("data/zipfolder/Great_Barrier_Reef_Features.shp")  
 
-
-library(sf)
-library(ggplot2)
+  
 
 # extract and tidy to sf
-lizard_shape <- st_read(shapefile_path, quiet=TRUE) %>%
-  mutate(longitude = st_drop_geometry(.)$X_COORD,
-         latitude = st_drop_geometry(.)$Y_COORD) |>
-  filter(FEAT_NAME=="Reef") |>
-  st_set_crs(4283) |>
-  st_transform(4326) |>
-  st_make_valid() |> 
-  clean_names() |> 
-  dplyr::select(loc_name_s, qld_name, gbr_name, label_id, geometry, longitude, latitude) |> 
-  mutate(Reef.Name = as.factor(gbr_name)) |> 
-  mutate(GBRMPA.id = as.factor(label_id)) |> 
-  mutate(id=sub("([a-zA-Z])$", "", label_id)) %>% 
-  filter(str_detect(Reef.Name, "Lizard"))
+lizard_shape <- gbr_shapefile |> 
+  filter(str_detect(GBR_NAME, "Lizard"))
 
 lizard_union <- st_union(lizard_shape)
 lizard_reefs <- st_sf(geometry = st_sfc(lizard_union), crs = st_crs(lizard_shape)) 
 lizard_islands <- lizard_reefs |> st_concave_hull(ratio=0.01)
 
 
-library(terra)
-library(tidyterra)
+# read in SST
+northpointDHW<- rast("data/dhw_5km_3231_0c35_4219_U1739212814032.nc")
 
-northpointDHW <- rast("/Users/rof011/dhw_5km_a99f_16a6_145a_U1721804809782.nc")
+filtered_northpointDHW <- northpointDHW["CRW_DHW"]#, varnames(northpointDHW)))
 
-filtered_northpointDHW <- northpointDHW[[which(time(northpointDHW) >=  "2024-03-10" & time(northpointDHW) <= "2024-03-11")]]
+# Filter layers between the specified dates
+filtered_northpointDHW <- filtered_northpointDHW[[which(
+   time(filtered_northpointDHW) >= as.Date("2024-03-10") &
+   time(filtered_northpointDHW) <= as.Date("2024-03-11")
+)]]
 
 
 
 ggplot() + theme_bw() +
-  geom_spatraster(data = filtered_northpointDHW$CRW_DHW_5182) +
-  scale_fill_gradientn(colors = (RColorBrewer::brewer.pal(9, "Reds")), limits=c(4,8)) +
+  geom_spatraster(data = filtered_northpointDHW) +
+  scale_fill_gradientn(colors = (RColorBrewer::brewer.pal(9, "Reds")), name="DHW", limits=c(4,8)) +
   geom_sf(data=lizard_islands, color="black", fill="darkgreen") +
   geom_sf(data=lizard_reefs, color="black", fill="beige") +
   geom_sf(data=north_point_sf, shape=21, fill="turquoise", size=2) +
   geom_sf_label(data=north_point_sf, fill="turquoise", label="North Point", nudge_y = 0.005, nudge_x = -0.005) +
   geom_sf(data=palfrey_se_sf, shape=21, fill="aquamarine", size=2) +
   geom_sf_label(data=palfrey_se_sf, fill="aquamarine", label="Palfrey SE", nudge_y = -0.005, nudge_x = -0.008) +
-  ggtitle("3rd March 2024 (NOAA DHW)") + xlab("") + ylab("")
+  ggtitle("10th Feb 2025 (NOAA DHW)") + xlab("") + ylab("")
 
 
 ```
+
+
 #### 3) Spatially average DHW data across gridcells
 
 
-Create `spatial_avg` function that takes each raster input and computes the average DHW value for each timestep across the input data
+Create `calculate_spatial_average` function that takes each raster input and computes the average DHW value for each timestep across the input data
 
 ```{r, fig.width=8, fig.height=3, message=FALSE, warning=FALSE}
 
 
 # Function to compute spatial average for each layer
-spatial_avg <- function(raster) {
+calculate_spatial_average <- function(raster) {
   time_layers <- unique(names(raster))
   avg_values <- sapply(time_layers, function(layer) {
     mean(values(raster[[layer]]), na.rm = TRUE)
@@ -155,9 +148,6 @@ hotspot_rast <- northpointDHW[[grep("CRW_HOTSPOT_", names(northpointDHW))]]
 sst_rast <- northpointDHW[[grep("CRW_SST_", names(northpointDHW))]]
 sst_anomaly_rast <- northpointDHW[[grep("CRW_SSTANOMALY_", names(northpointDHW))]]
 
-library(terra)
-library(dplyr)
-library(rlang)
 
 
 # Calculate the spatial average for each timestep
@@ -217,6 +207,7 @@ maxdhw <- lizard_data |>
   group_by(year) |> 
   summarise(maxdhw=max(CRW_DHW_)) |> 
 ggplot() + theme_bw() +
+  scale_x_continuous(limits=c(2009, 2024.5), breaks=seq(2010, 2024,2)) +
   geom_col(aes(x=year, y=maxdhw, fill=maxdhw), show.legend=FALSE, linewidth=0.25, color="black") +
   ylim(0, 10) + ylab("Maximum annual DHW") +
   scale_fill_gradient2(midpoint = 3, low = brewer.pal(9, "RdBu")[9], mid = brewer.pal(9, "RdBu")[5], high = brewer.pal(9, "RdBu")[1], limits = c(0, 10))
@@ -275,7 +266,8 @@ reference_year <- 2020
 lizard_anoms <- lizard_data %>%
   ungroup() %>%
   group_by(year) %>% 
-  filter(year > 2014) %>%
+#  filter(year > 2014) %>%
+  filter(year < 2025) %>%
   mutate(reference_date = as.Date(day - 1, origin = paste0(reference_year, "-01-01"))) %>%
   mutate(reference_date = if_else(month >= 11, reference_date - years(1), reference_date)) %>%
   ggplot() + 
@@ -284,7 +276,7 @@ lizard_anoms <- lizard_data %>%
   scale_x_date(date_breaks = "1 month", date_labels = "%b", 
                limits = as.Date(c(paste0(reference_year-1, "-11-01"), paste0(reference_year, "-10-31")))) +
   labs(x = "Month", y = "CRW SST") +
-  scale_color_manual(name = "Year", values = RColorBrewer::brewer.pal(10, "RdBu")) +
+  scale_color_manual(name = "Year", values =colorRampPalette(RColorBrewer::brewer.pal(11, "RdBu"))(15)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   #scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, 2)) +
   ylab("SST Anomalies") +
@@ -304,16 +296,10 @@ Combine bleaching alert status and DHW time-series for 2024 bleaching event
 library(ggpattern)
 
 # get climatology
-mmm_val <- terra::rast("/Users/rof011/GBR-dhw/datasets/GBR_ct5km_MMM_v3.1.nc") |> 
+mmm_val <- terra::rast("data/GBR_ct5km_MMM_v3.1.nc") |> 
   crop(lizard_shape) |> 
   values() |> 
   as.numeric()
-
-library(ggplot2)
-library(dplyr)
-library(ggpattern)
-
-# Assuming lizard_data is already loaded and processed
 
 sst <- lizard_data %>%
   ungroup() %>%
@@ -340,17 +326,17 @@ sst <- lizard_data %>%
   
   geom_linerange(aes(x = as.Date(time), ymin = 23.5, ymax = 24, color = bleachingwatch), linewidth = 2) +  # Set y-value and width for columns
   
-  geom_ribbon_pattern(aes(x = as.Date(time), ymin = mmm_val, ymax = mmm_area), na.rm = TRUE,
-                      pattern = "gradient",
-                      fill = "#00000000",
-                      pattern_fill = "darkgoldenrod2",
-                      pattern_fill2 = "darkgoldenrod2") +
-  
-  geom_ribbon_pattern(aes(x = as.Date(time), ymin = dashed_line, ymax = fill_area), na.rm = TRUE,
-                      pattern = "gradient",
-                      fill = "#00000000",
-                      pattern_fill = "red",
-                      pattern_fill2 = "red") +
+  # geom_ribbon_pattern(aes(x = as.Date(time), ymin = mmm_val, ymax = mmm_area), na.rm = TRUE,
+  #                     pattern = "gradient",
+  #                     fill = "#00000000",
+  #                     pattern_fill = "darkgoldenrod2",
+  #                     pattern_fill2 = "darkgoldenrod2") +
+  # 
+  # geom_ribbon_pattern(aes(x = as.Date(time), ymin = dashed_line, ymax = fill_area), na.rm = TRUE,
+  #                     pattern = "gradient",
+  #                     fill = "#00000000",
+  #                     pattern_fill = "red",
+  #                     pattern_fill2 = "red") +
   
   geom_hline(yintercept = mmm_val, color = "darkred") +
   geom_hline(yintercept = mmm_val + 1, linetype = "dashed") +
@@ -396,7 +382,12 @@ layout <- '
 AB
 CC
 '
-wrap_plots(A = maxdhw, B = timeseries_dhw, C = sst, widths=c(1,1),  heights = c(4, 5), design = layout)
+output <- wrap_plots(A = maxdhw, B = timeseries_dhw, C = sst, widths=c(1,1),  heights = c(4, 5), design = layout)
 
+output
+
+
+ggsave("outputs/layout.pdf", plot = output, width = 10, height = 8, device = "pdf")
+ggsave("outputs/layout.png", plot = output, width = 10, height = 8, dpi = 300, device = "png")
 
 ```
